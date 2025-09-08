@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <math.h>
 
 #define W 800
@@ -248,6 +249,33 @@ paint_stroke(Tile *tiles, Vector2 a, Vector2 b, int r, Color c)
     return changed;
 }
 
+static bool show_stats = true;
+
+static int count_changed_tiles_this_snapshot(const History *h) {
+    if (h->cursor <= 0) return 0;
+    int changed = 0;
+    const Snapshot *cur = &h->snaps[h->cursor];
+    const Snapshot *prev = &h->snaps[h->cursor - 1];
+    for (int i = 0; i < NTILES; ++i)
+        if (cur->bufs[i] != prev->bufs[i]) changed++;
+    return changed;
+}
+
+static void draw_stats(const History *h) {
+    const int changed = count_changed_tiles_this_snapshot(h);
+    const int reused  = NTILES - changed;
+
+    char line[256];
+    int y = 36;
+
+    snprintf(line, sizeof(line), "Snapshot %d/%d", h->cursor, h->count-1);
+    DrawText(line, 10, y, 20, BLACK); y += 22;
+
+    snprintf(line, sizeof(line), "Changed tiles: %d (%.1f%%) | Reused: %d",
+             changed, NTILES ? 100.0f*changed/NTILES : 0.f, reused);
+    DrawText(line, 10, y, 20, BLACK); y += 22;
+}
+
 int main(void)
 {
     InitWindow(W, H, "CowPaint");
@@ -290,6 +318,7 @@ int main(void)
         was_down = down;
         prev_mouse = m;
 
+        if (IsKeyPressed(KEY_S)) show_stats = !show_stats;
         if (IsKeyPressed(KEY_C))
         {
             for(int i = 0; i < NTILES; ++i)
@@ -298,6 +327,7 @@ int main(void)
                 memset(tiles[i].buf->px, 0xFF, tile_bytes());
                 tiles[i].dirty = 1;
             }
+            history_push(&hist, tiles);
         }
 
         if (IsKeyPressed(KEY_EQUAL)) brush_radius = (brush_radius < 128) ? brush_radius + 2 : 128;
@@ -321,7 +351,8 @@ int main(void)
                     int i = ty*GRID_X + tx;
                     DrawTexture(tiles[i].tex, tx*TILE_W, ty*TILE_H, WHITE);
                 }
-            DrawText("LMB paint | C clear | <- / -> History | +/- brush", 10, 10, 20, BLACK);
+            DrawText("LMB paint | C clear | <- / -> History | +/- brush | S stats", 10, 10, 20, BLACK);
+            if (show_stats) draw_stats(&hist);
         EndDrawing();
     }
 
