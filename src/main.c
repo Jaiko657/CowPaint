@@ -27,6 +27,10 @@ typedef struct {
     int dirty;        // 1 if CPU->GPU upload needed
 } Tile;
 
+typedef struct {
+    TileBuf *bufs[NTILES];
+} Snapshot;
+
 static inline size_t tile_bytes(void) { return (size_t)TILE_W * TILE_H * 4; }
 static inline void tilebuf_retain(TileBuf *b) {
     if (b) b->refcnt++;
@@ -49,6 +53,27 @@ static void tile_ensure_unique(Tile *t) {
         tilebuf_release(b);
         t->buf = nb;
     }
+}
+
+static Snapshot snapshot_take(Tile tiles[]) {
+    Snapshot s;
+    for (int i = 0; i < NTILES; ++i) {
+        s.bufs[i] = tiles[i].buf;
+        tilebuf_retain(s.bufs[i]);
+    }
+    return s;
+}
+static void snapshot_restore(const Snapshot *s, Tile tiles[]) {
+    for (int i = 0; i < NTILES; ++i) {
+        tilebuf_release(tiles[i].buf);
+        tiles[i].buf = s->bufs[i];
+        tilebuf_retain(tiles[i].buf);
+        tiles[i].dirty = 1;
+    }
+}
+static void snapshot_free(Snapshot *s) {
+    for (int i = 0; i < NTILES; ++i)
+        tilebuf_release(s->bufs[i]);
 }
 
 static void tile_init(Tile *t) {
@@ -102,18 +127,29 @@ int main(void) {
     Tile tiles[NTILES];
     for (int i = 0; i < NTILES; ++i) tile_init(&tiles[i]);
 
+    Snapshot snap;
+    int has_snap = 0;
+
     while (!WindowShouldClose()) {
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             Vector2 m = GetMousePosition();
             paint_circle(tiles, (int)m.x, (int)m.y, BRUSH, BLACK);
-            TraceLog(LOG_DEBUG, "Drawing");
         }
 
         if (IsKeyPressed(KEY_C)) {
             for(int i = 0; i < NTILES; ++i) {
-              memset(tiles[i].buf->px, 0xFF, TILE_H*TILE_W*4);
+              tile_ensure_unique(&tiles[i]);
+              memset(tiles[i].buf->px, 0xFF, tile_bytes());
               tiles[i].dirty = 1;
             }
+        }
+        if (IsKeyPressed(KEY_S)) {
+            if (has_snap) snapshot_free(&snap);
+            snap = snapshot_take(tiles);
+            has_snap = 1;
+        }
+        if (has_snap && IsKeyPressed(KEY_R)) {
+            snapshot_restore(&snap, tiles);
         }
 
         if (IsKeyPressed(KEY_EQUAL)) BRUSH = (BRUSH < 128) ? BRUSH + 2 : 128;
@@ -132,12 +168,12 @@ int main(void) {
                     int i = ty*GRID_X + tx;
                     DrawTexture(tiles[i].tex, tx*TILE_W, ty*TILE_H, WHITE);
                 }
-            DrawText("LMB paint | C clear | +/- brush", 10, 10, 20, BLACK);
+            DrawText("LMB paint | C clear | S save | R undo | +/- brush", 10, 10, 20, BLACK);
         EndDrawing();
-
     }
 
     for (int i = 0; i < NTILES; ++i) tile_free(&tiles[i]);
+    if (has_snap) snapshot_free(&snap);
     CloseWindow();
     return 0;
 }
