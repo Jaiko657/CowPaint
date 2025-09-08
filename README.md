@@ -3,7 +3,7 @@
 A simple paint app experiment to learn **Copy-on-Write (CoW) snapshots** inspired by Btrfs.  
 Built with [raylib](https://www.raylib.com/) and [nob.h](https://github.com/tsoding/nob.h).
 
----
+![CowPaint Logo](third_party/logo.png)
 
 ## Requirements
 
@@ -17,7 +17,6 @@ sudo apt-get install -y git gcc pkg-config libraylib-dev
 sudo dnf install -y git gcc pkgconf-pkg-config raylib-devel
 ```
 
----
 
 ## Build & Run
 
