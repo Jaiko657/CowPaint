@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define W 800
 #define H 600
@@ -42,6 +43,8 @@ typedef struct
 } History;
 
 static int brush_radius = 8;
+static Vector2 prev_mouse = {0};
+static bool    was_down   = false;
 static bool stroke_dirty = false; //More global state, who cares
 
 static inline size_t
@@ -221,6 +224,30 @@ paint_circle(Tile *tiles, int mx, int my, int r, Color c)
     }
 }
 
+//cant be bothered learning Bezier this will do
+static bool
+paint_stroke(Tile *tiles, Vector2 a, Vector2 b, int r, Color c)
+{
+    float dx = b.x - a.x;
+    float dy = b.y - a.y;
+    float dist = sqrtf(dx*dx + dy*dy);
+    float step = r * 0.5f;
+    if (step < 1.0f) step = 1.0f;
+
+    int samples = (int)(dist / step) + 1;
+    bool changed = false;
+
+    for (int i = 0; i <= samples; ++i)
+    {
+        float t = samples ? (float)i / (float)samples : 0.0f;
+        int x = (int)(a.x + t * dx);
+        int y = (int)(a.y + t * dy);
+        paint_circle(tiles, x, y, r, c);
+        changed = true;
+    }
+    return changed;
+}
+
 int main(void)
 {
     InitWindow(W, H, "CowPaint");
@@ -236,13 +263,21 @@ int main(void)
 
     while (!WindowShouldClose())
     {
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
-        {
-            Vector2 m = GetMousePosition();
-            paint_circle(tiles, (int)m.x, (int)m.y, brush_radius, BLACK);
-            stroke_dirty = true;
-        }
+        Vector2 m = GetMousePosition();
+        bool down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 
+        if (down)
+        {
+            if (!was_down)
+            {
+                paint_circle(tiles, (int)m.x, (int)m.y, brush_radius, BLACK);
+                stroke_dirty = true;
+            }
+            else
+            {
+                stroke_dirty |= paint_stroke(tiles, prev_mouse, m, brush_radius, BLACK);
+            }
+        }
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
         {
             if (stroke_dirty)
@@ -251,6 +286,9 @@ int main(void)
                 stroke_dirty = false;
             }
         }
+
+        was_down = down;
+        prev_mouse = m;
 
         if (IsKeyPressed(KEY_C))
         {

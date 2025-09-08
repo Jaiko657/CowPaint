@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     // compile app
     nob_cmd_append(&cmd,
         "sh", "-lc",
-        "cc -std=c99 -Wall -Wextra src/main.c -o build/cowpaint $(pkg-config --cflags --libs raylib)"
+        "cc -std=c99 -Wall -Wextra src/main.c -o build/cowpaint $(pkg-config --cflags --libs raylib) -lm"
     );
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 
