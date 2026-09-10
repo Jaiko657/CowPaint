@@ -7,10 +7,10 @@
 #include <stdio.h>
 #include <math.h>
 
-#define W 800
-#define H 600
-#define TILE_W 200
-#define TILE_H 200
+#define W 1280
+#define H 720
+#define TILE_W 320
+#define TILE_H 180
 #define MAX_SNAPS 128
 
 #if (W % TILE_W) || (H % TILE_H)
@@ -47,6 +47,10 @@ static int brush_radius = 8;
 static Vector2 prev_mouse = {0};
 static bool    was_down   = false;
 static bool stroke_dirty = false; //More global state, who cares
+
+#define FLASH_DECAY 1.1f   // flash alpha decay per second (half speed)
+#define FLASH_PEAK  0.45f  // max overlay alpha for reused-chunk flash
+static float tile_flash[NTILES];  // 1.0 = just triggered, 0 = done
 
 static inline size_t
 tile_bytes(void) {
@@ -250,6 +254,7 @@ paint_stroke(Tile *tiles, Vector2 a, Vector2 b, int r, Color c)
 }
 
 static bool show_stats = true;
+static bool show_flash  = true;  // X toggles reuse (blue) flash
 
 static int count_changed_tiles_this_snapshot(const History *h) {
     if (h->cursor <= 0) return 0;
@@ -311,6 +316,10 @@ int main(void)
             if (stroke_dirty)
             {
                 history_push(&hist, tiles);
+                /* Flash tiles that were reused (same buffer as previous snapshot). */
+                for (int i = 0; i < NTILES; ++i)
+                    if (hist.cursor > 0 && tiles[i].buf == hist.snaps[hist.cursor - 1].bufs[i])
+                        tile_flash[i] = 1.0f;
                 stroke_dirty = false;
             }
         }
@@ -319,6 +328,7 @@ int main(void)
         prev_mouse = m;
 
         if (IsKeyPressed(KEY_S)) show_stats = !show_stats;
+        if (IsKeyPressed(KEY_X)) show_flash  = !show_flash;
         if (IsKeyPressed(KEY_C))
         {
             for(int i = 0; i < NTILES; ++i)
@@ -351,7 +361,21 @@ int main(void)
                     int i = ty*GRID_X + tx;
                     DrawTexture(tiles[i].tex, tx*TILE_W, ty*TILE_H, WHITE);
                 }
-            DrawText("LMB paint | C clear | <- / -> History | +/- brush | S stats", 10, 10, 20, BLACK);
+            /* Fade overlay for reused (unmodified) chunks after a stroke (X toggles). */
+            if (show_flash)
+                for (int ty = 0; ty < GRID_Y; ++ty)
+                    for (int tx = 0; tx < GRID_X; ++tx)
+                    {
+                        int i = ty*GRID_X + tx;
+                        if (tile_flash[i] > 0.001f)
+                        {
+                            DrawRectangle(tx*TILE_W, ty*TILE_H, TILE_W, TILE_H,
+                                          Fade(BLUE, tile_flash[i] * FLASH_PEAK));
+                            tile_flash[i] -= FLASH_DECAY * GetFrameTime();
+                            if (tile_flash[i] < 0) tile_flash[i] = 0;
+                        }
+                    }
+            DrawText("LMB paint | C clear | <- / -> History | +/- brush | S stats | X reuse flash", 10, 10, 20, BLACK);
             if (show_stats) draw_stats(&hist);
         EndDrawing();
     }

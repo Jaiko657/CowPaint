@@ -1,0 +1,59 @@
+# Build CowPaint for web (Emscripten) and deploy to GitHub Pages.
+# Enable Pages in repo Settings → Pages → Source: "GitHub Actions".
+
+name: Build and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CowPaint
+        uses: actions/checkout@v4
+
+      - name: Checkout raylib
+        uses: actions/checkout@v4
+        with:
+          repository: raysan5/raylib
+          path: raylib
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Build raylib for web
+        run: |
+          cd raylib/src
+          make PLATFORM=PLATFORM_WEB -B
+
+      - name: Build CowPaint for web
+        env:
+          RAYLIB_SRC: ${{ github.workspace }}/raylib/src
+        run: bash build_web.sh
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
